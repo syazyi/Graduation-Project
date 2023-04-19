@@ -8,6 +8,8 @@
 #include "Terrain/Terrain.h"
 #include "NoiseMapGernerator.generated.h"
 
+struct FTerrainType;
+
 UCLASS()
 class BYSJ_API ANoiseMapGernerator : public AActor
 {
@@ -39,18 +41,26 @@ private:
 	FColor GetTerrainColor(float height);
 
 	void ApplyMaterial();
+
+	void CreateMeshes();
 protected:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	int width;
+	int width {500};
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	int height;
+	int height {500};
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	float scale;
+	float scale {4.f};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NoiseSet")
-	float heightOffset;
+	float heightOffset { 100.f };
+
+	UPROPERTY(EditAnywhere, Category = "NoiseSet")
+	int32 ParallelPartCount{ 25 };
+
+	UPROPERTY(EditAnywhere, Category = "NoiseSet")
+	float MeshScale{100.f};
 	
 	TArray<TArray<float>> noiseMap;
 	
@@ -60,8 +70,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<FTerrainType> Terrains;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	UProceduralMeshComponent* Mesh;
-
+	UPROPERTY(EditAnywhere)
+	TArray<UProceduralMeshComponent*> Meshes;
+	
 	UMaterial* BaseMaterial;
+
+	
 };

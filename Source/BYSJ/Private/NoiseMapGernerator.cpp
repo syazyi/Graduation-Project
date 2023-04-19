@@ -13,17 +13,28 @@ ANoiseMapGernerator::ANoiseMapGernerator()
 
 	BaseMaterial =  ConstructorHelpers::FObjectFinder<UMaterial>(TEXT("Material'/Game/BYSJ/Noise/NoiseMap.NoiseMap'")).Object;
 	AddTerrains();
-	Mesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Terrain Mesh"));
-	Mesh->SetMaterial(0, BaseMaterial);
+	
+	Meshes.Reserve(ParallelPartCount);
+	Meshes.Emplace(CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Terrain Mesha")));
+	Meshes[0]->SetMobility(EComponentMobility::Static);
+	Meshes[0]->SetupAttachment(RootComponent);
+	
+	for (int i = 1; i < ParallelPartCount; i++)
+	{
+		char c;
+		Int32ToChar(i,&c);
+		c += 'a';
+		Meshes.Emplace(CreateDefaultSubobject<UProceduralMeshComponent>(FName(FString("Terrain Mesh") + c)));
+		Meshes[i]->SetMobility(EComponentMobility::Static);
+		Meshes[i]->SetupAttachment(Meshes[0]);
+	}
 }
 
 // Called when the game starts or when spawned
 void ANoiseMapGernerator::BeginPlay()
 {
 	Super::BeginPlay();
-
 	
-	//GenerateWithCube();
 	GenerateWithTexture();
 	CreateTerrainMesh();
 	ApplyMaterial();
@@ -38,7 +49,7 @@ void ANoiseMapGernerator::Tick(float DeltaTime)
 
 void ANoiseMapGernerator::GenerateWithCube()
 {
-	noiseMap = NoiseMap::CreateNoiseMap(width, height, scale);
+	noiseMap = NoiseMap::CreateNoiseMap(width, height, scale, GetActorLocation());
 	auto pos = GetActorLocation();
 	auto world = GetWorld();
 	if(world == nullptr)
@@ -56,7 +67,9 @@ void ANoiseMapGernerator::GenerateWithCube()
 
 UTexture2D* ANoiseMapGernerator::GenerateWithTexture()
 {
-	noiseMap = NoiseMap::CreateNoiseMap(width, height, scale);
+	auto transfer = GetRootComponent()->GetRelativeTransform();
+	auto location = transfer.GetLocation();
+	noiseMap = NoiseMap::CreateNoiseMap(width + 1, height + 1, scale, location);
 	if(Texture2D == nullptr)
 	{
 		Texture2D = DrawNoiseMap();
@@ -67,63 +80,155 @@ UTexture2D* ANoiseMapGernerator::GenerateWithTexture()
 
 void ANoiseMapGernerator::CreateTerrainMesh()
 {
+	
 	auto location = GetActorLocation();
 	
-	int MeshesWidth = width;
-	int MeshesHeight = height;
+	int32 MeshesWidth = width;
+	int32 MeshesHeight = height;
 	
-	TArray<FVector> verteies;
-	verteies.Reserve(MeshesWidth * MeshesHeight);
+	auto start = FDateTime::Now().GetTimeOfDay().GetTotalMilliseconds();
 
-	TArray<int32> triangle_index;
-	int indexSize = (MeshesWidth - 1) * (MeshesHeight - 1) * 6;
-	triangle_index.Reserve(indexSize);
-	
-	TArray<FVector2D> UV;
-	UV.Reserve(MeshesWidth * MeshesHeight);
-	
-	float MeshScale = 100.f;
-	for(int i = 0; i < MeshesHeight; i ++)
+	for(int32 chunkIndex = 0; chunkIndex < ParallelPartCount; chunkIndex ++)
 	{
-		for(int j = 0; j < MeshesWidth; j++)
+		
+		auto HeightVertexCount = height; // 4
+		auto WidthVertexCount = width + 1; // 5
+		auto ChunkHeightCount = HeightVertexCount - 1; // 3
+		auto ChunkWidthCount = WidthVertexCount - 1;  // 3
+			
+		auto ChunkHeight = ChunkHeightCount / ParallelPartCount;// 3 / 3 = 1
+		auto ChunkHeightFinal = ChunkHeight;
+		if(chunkIndex == ParallelPartCount - 1)
 		{
-			float X = (i - (MeshesHeight * 0.5f)) * MeshScale;
-			float Y = (j - (MeshesWidth * 0.5f)) * MeshScale;
-			verteies.Add(FVector(X, Y, (noiseMap[i][j] + 1) * 127.5f * heightOffset) + location);
-
-			UV.Add(FVector2D(static_cast<float>(j) / MeshesWidth, static_cast<float>(i) / MeshesHeight));
-			if(i < MeshesHeight - 1 && j < MeshesWidth - 1){
-				triangle_index.Add(i * MeshesWidth + j);
-				triangle_index.Add(i * MeshesWidth + j + 1);
-				triangle_index.Add((i + 1) * MeshesWidth + j);
-				
-				triangle_index.Add(i * MeshesWidth + j + 1);
-				triangle_index.Add((i + 1) * MeshesWidth + j + 1);
-				triangle_index.Add((i + 1) * MeshesWidth + j);
+			auto remainder = MeshesHeight % ParallelPartCount;//4
+			if(remainder != 0)
+			{
+				ChunkHeightFinal = ChunkHeightFinal + remainder;//66
+			}else
+			{
+				ChunkHeightFinal = ChunkHeightFinal + ParallelPartCount;
 			}
 		}
+		
+		TArray<FVector> verteies;
+		verteies.Reserve(WidthVertexCount * (ChunkHeightFinal + 1));//5 * 2
+	
+		TArray<FVector2D> UV;
+		UV.Reserve(WidthVertexCount * (ChunkHeightFinal + 1));//5 * 2
+
+		TArray<int32> triangle_index;
+		int indexSize = (WidthVertexCount - 1) * (ChunkHeightFinal) * 6;// 4 * 1 * 6 
+		triangle_index.Reserve(indexSize);
+
+		for(int32 index = 0; index < ChunkHeightFinal + 1; index++)
+		{
+			int32 i = chunkIndex * ChunkHeight + index;// 0 1, 1 2, 2 3
+			for(int32 j = 0; j < WidthVertexCount; j++)
+			{
+				float X = (i - (MeshesHeight * 0.5f)) * MeshScale;
+				float Y = (j - (MeshesWidth * 0.5f)) * MeshScale;
+				
+				verteies.Emplace(FVector(X, Y, (noiseMap[i][j]) * 127.5f * heightOffset));
+
+				UV.Emplace(FVector2D((j + 1.0f) / (WidthVertexCount + 1), (i + 1.0f) / (MeshesHeight + 1)));
+					
+				if(index < ChunkHeightFinal && j < WidthVertexCount - 1){
+					triangle_index.Emplace(index * WidthVertexCount + j);
+					triangle_index.Emplace(index * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j);
+					
+					triangle_index.Emplace(index * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j);
+				}
+			}
+		}
+		Meshes[chunkIndex]->CreateMeshSection(0,verteies, triangle_index, TArray<FVector>{}, UV, TArray<FColor>{}, TArray<FProcMeshTangent>{},
+			true);
 	}
 	
-	Mesh->CreateMeshSection(0, verteies, triangle_index, TArray<FVector>{}, UV, TArray<FColor>{}, TArray<FProcMeshTangent>{}, true);
+	/*for(int32 chunkIndex = 0; chunkIndex < ParallelPartCount; chunkIndex ++)
+	{
+		
+		auto HeightVertexCount = height; // 4
+		auto WidthVertexCount = width + 1; // 5
+		auto ChunkHeightCount = HeightVertexCount - 1; // 3
+		auto ChunkWidthCount = WidthVertexCount - 1;  // 3
+			
+		auto ChunkHeight = ChunkHeightCount / ParallelPartCount;// 3 / 3 = 1
+		auto ChunkHeightFinal = ChunkHeight;
+		if(chunkIndex == ParallelPartCount - 1)
+		{
+			auto remainder = MeshesHeight % ParallelPartCount;//4
+			if(remainder != 0)
+			{
+				ChunkHeightFinal = ChunkHeightFinal + remainder;//66
+			}else
+			{
+				ChunkHeightFinal = ChunkHeightFinal + ParallelPartCount;
+			}
+		}
+		
+		TArray<FVector> verteies;
+		verteies.Reserve(WidthVertexCount * (ChunkHeightFinal + 1));//5 * 2
+	
+		TArray<FVector2D> UV;
+		UV.Reserve(WidthVertexCount * (ChunkHeightFinal + 1));//5 * 2
+
+		TArray<int32> triangle_index;
+		int indexSize = (WidthVertexCount - 1) * (ChunkHeightFinal) * 6;// 4 * 1 * 6 
+		triangle_index.Reserve(indexSize);
+
+		for(int32 index = 0; index < ChunkHeightFinal + 1; index++)
+		{
+			int32 i = chunkIndex * ChunkHeight + index;// 0 1, 1 2, 2 3
+			for(int32 j = 0; j < WidthVertexCount; j++)
+			{
+				float X = (i - (MeshesHeight * 0.5f)) * MeshScale;
+				float Y = (j - (MeshesWidth * 0.5f)) * MeshScale;
+				
+				verteies.Emplace(FVector(X, Y, (noiseMap[i][j]) * 127.5f * heightOffset));
+
+				UV.Emplace(FVector2D((j + 1.0f) / (WidthVertexCount + 1), (i + 1.0f) / (MeshesHeight + 1)));
+					
+				if(index < ChunkHeightFinal && j < WidthVertexCount - 1){
+					triangle_index.Emplace(index * WidthVertexCount + j);
+					triangle_index.Emplace(index * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j);
+					
+					triangle_index.Emplace(index * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j + 1);
+					triangle_index.Emplace((index + 1) * WidthVertexCount + j);
+				}
+			}
+		}
+		Meshes[chunkIndex]->CreateMeshSection(0,verteies, triangle_index, TArray<FVector>{}, UV, TArray<FColor>{}, TArray<FProcMeshTangent>{},
+			true);
+	}*/
+	
+	auto end = FDateTime::Now().GetTimeOfDay().GetTotalMilliseconds();
+	auto delta = start - end;
+	UE_LOG(LogTemp, Warning, TEXT("Mesh Generator spent %f ms"), delta);
 }
 
 UTexture2D* ANoiseMapGernerator::DrawNoiseMap()
 {
-	
+	auto TextureWidth = width;
+	auto TextureHeight = height;
 	TArray<FColor> color;
-	color.SetNum(width * height);
-
-	for(int i = 0; i < height; i++){
-		for(int j = 0; j < width; j++)
+	color.SetNum(TextureWidth * TextureHeight);
+	
+	for(int i = 0; i < TextureHeight; i++){
+		for(int j = 0; j < TextureWidth; j++)
 		{
 			//int index = (i * width + j) * 4;
-			int index = i * width + j;
+			int index = i * TextureWidth + j;
 			//color[index] = FLinearColor::LerpUsingHSV(FLinearColor::White, FLinearColor::Black, (noiseMap[i][j] + 1) * 0.5f).ToFColor(true);
 			color[index] = GetTerrainColor(noiseMap[i][j]);
 		}
 	}
 	
-	UTexture2D* texture = UTexture2D::CreateTransient(width, height);
+	UTexture2D* texture = UTexture2D::CreateTransient(TextureWidth, TextureHeight);
 	void* data = texture->PlatformData->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
 	FMemory::Memcpy(data, color.GetData(), color.Num() * 4);
 	texture->PlatformData->Mips[0].BulkData.Unlock();
@@ -134,13 +239,20 @@ UTexture2D* ANoiseMapGernerator::DrawNoiseMap()
 
 void ANoiseMapGernerator::AddTerrains()
 {
-	FTerrainType water{ "Water", -1.0f, 0.0f, FColor::Blue };
-	FTerrainType land{ "land", 0.0f, 0.5f, FColor::Green};
-	FTerrainType plateau{"plateau", 0.5f, 1.0f, FColor::White};
+	FTerrainType DeepSea{ "Deep Sea", -1.0f, -0.7f, FColor(0x0E163F) };
+	FTerrainType Water{ "Water", -0.7f, -0.3f, FColor(0x8CCCFF) };
+	FTerrainType Sand{ "Sand", -0.3f, 0.0f, FColor(0xE3C78B)};
+	FTerrainType Land{ "Land", 0.0f, 0.3f, FColor(0xC3DE80)};
+	FTerrainType plateau{"plateau", 0.3f, 0.7f, FColor(0xEEFFD7)};
+	FTerrainType Top{"Top", 0.7f, 1.0f, FColor(0xFFFFFF)};
+	
 
-	Terrains.Emplace(water);
-	Terrains.Emplace(land);
+	Terrains.Emplace(DeepSea);
+	Terrains.Emplace(Water);
+	Terrains.Emplace(Sand);
+	Terrains.Emplace(Land);
 	Terrains.Emplace(plateau);
+	Terrains.Emplace(Top);
 }
 
 FColor ANoiseMapGernerator::GetTerrainColor(float NoiseMapHeight)
@@ -158,9 +270,18 @@ FColor ANoiseMapGernerator::GetTerrainColor(float NoiseMapHeight)
 
 void ANoiseMapGernerator::ApplyMaterial()
 {
-	UMaterialInstanceDynamic* MaterialInstanceDynamic = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+	UMaterialInstanceDynamic* MaterialInstanceDynamic = UMaterialInstanceDynamic::Create(BaseMaterial, this, FName(TEXT("Terrain Material")));
 	MaterialInstanceDynamic->SetTextureParameterValue(FName("T2DParam"), Texture2D);
-	
-	Mesh->CreateAndSetMaterialInstanceDynamicFromMaterial(0, MaterialInstanceDynamic);
+
+	for(int i = 0; i < ParallelPartCount; i++)
+	{
+		Meshes[i]->CreateAndSetMaterialInstanceDynamicFromMaterial(0, MaterialInstanceDynamic);
+	}
+}
+
+void ANoiseMapGernerator::CreateMeshes()
+{
+
+
 }
 

@@ -12,7 +12,7 @@ NoiseMap::~NoiseMap()
 {
 }
 
-TArray<TArray<float>> NoiseMap::CreateNoiseMap(uint32_t width, uint32_t height, float scale)
+TArray<TArray<float>> NoiseMap::CreateNoiseMap(uint32_t width, uint32_t height, float scale, FVector Location)
 {
 	TArray<TArray<float>> noiseMap;
 	TArray<float> temp;
@@ -23,18 +23,22 @@ TArray<TArray<float>> NoiseMap::CreateNoiseMap(uint32_t width, uint32_t height, 
 	{
 		scale = 0.001f;
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("%f %f"), Location.X, Location.Y)
 	
-	for(uint32 i = 0; i < height; i++)
+	ParallelFor(height, [&](int32 i)
 	{
-		for(uint32 j = 0; j < width; j++)
+		ParallelFor(width, [&](int32 j)
 		{
-			FVector2D sample { (static_cast<float>(j) + 1.0f) / width * scale, (static_cast<float>(i) + 1.0f) / height * scale};
+			auto x = Location.X / 100.f;
+			auto y = Location.Y / 100.f;
+			FVector2D sample { (static_cast<float>(j)+ y)/ width * scale, (static_cast<float>(i)+ x) / height  * scale};
 			float perlin_value = Perlin(sample);
 			//float perlin_value = FMath::PerlinNoise2D(sample);
 			//perlin_value = (perlin_value + 1.f) * 127.5;
 			noiseMap[i][j] = perlin_value;
-		}
-	}
+		});
+	});
 	return noiseMap;
 }
 
