@@ -2,8 +2,11 @@
 
 
 #include "NoiseMapGernerator.h"
+
+#include "MyGameInstance.h"
 #include "NoiseMap.h"
 #include "UnitCube.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 ANoiseMapGernerator::ANoiseMapGernerator()
@@ -28,16 +31,15 @@ ANoiseMapGernerator::ANoiseMapGernerator()
 		Meshes[i]->SetMobility(EComponentMobility::Static);
 		Meshes[i]->SetupAttachment(Meshes[0]);
 	}
+	
+	bReplicates = true;
 }
 
 // Called when the game starts or when spawned
 void ANoiseMapGernerator::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	GenerateWithTexture();
-	CreateTerrainMesh();
-	ApplyMaterial();
+	bReplicates = true;
 }
 
 // Called every frame
@@ -88,9 +90,10 @@ void ANoiseMapGernerator::CreateTerrainMesh()
 	
 	auto start = FDateTime::Now().GetTimeOfDay().GetTotalMilliseconds();
 
+//Update process
+	auto GameInstance = Cast<UMyGameInstance>(GetGameInstance());
 	for(int32 chunkIndex = 0; chunkIndex < ParallelPartCount; chunkIndex ++)
 	{
-		
 		auto HeightVertexCount = height; // 4
 		auto WidthVertexCount = width + 1; // 5
 		auto ChunkHeightCount = HeightVertexCount - 1; // 3
@@ -145,6 +148,7 @@ void ANoiseMapGernerator::CreateTerrainMesh()
 		}
 		Meshes[chunkIndex]->CreateMeshSection(0,verteies, triangle_index, TArray<FVector>{}, UV, TArray<FColor>{}, TArray<FProcMeshTangent>{},
 			true);
+		GameInstance->TerrainProcess += 1 / ParallelPartCount;
 	}
 	
 	/*for(int32 chunkIndex = 0; chunkIndex < ParallelPartCount; chunkIndex ++)
@@ -209,6 +213,13 @@ void ANoiseMapGernerator::CreateTerrainMesh()
 	auto end = FDateTime::Now().GetTimeOfDay().GetTotalMilliseconds();
 	auto delta = start - end;
 	UE_LOG(LogTemp, Warning, TEXT("Mesh Generator spent %f ms"), delta);
+}
+
+void ANoiseMapGernerator::OneTouchTerrain()
+{
+	GenerateWithTexture();
+	CreateTerrainMesh();
+	ApplyMaterial();
 }
 
 UTexture2D* ANoiseMapGernerator::DrawNoiseMap()
@@ -285,3 +296,13 @@ void ANoiseMapGernerator::CreateMeshes()
 
 }
 
+void ANoiseMapGernerator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ANoiseMapGernerator, Meshes)
+}
+
+int ANoiseMapGernerator::width = 500;
+int ANoiseMapGernerator::height = 500;
+float ANoiseMapGernerator::MeshScale = 100.f;

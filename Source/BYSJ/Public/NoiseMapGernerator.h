@@ -33,6 +33,13 @@ public:
 	UTexture2D* GenerateWithTexture();
 
 	void CreateTerrainMesh();
+
+	UFUNCTION(BlueprintCallable)
+	void OneTouchTerrain();
+
+	static int width;
+	static int height;
+	static float MeshScale;
 private:
 	UTexture2D* DrawNoiseMap();
 
@@ -45,22 +52,13 @@ private:
 	void CreateMeshes();
 protected:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	int width {500};
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	int height {500};
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "NoiseSet")
-	float scale {4.f};
+	float scale {2.f};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NoiseSet")
 	float heightOffset { 100.f };
 
 	UPROPERTY(EditAnywhere, Category = "NoiseSet")
 	int32 ParallelPartCount{ 25 };
-
-	UPROPERTY(EditAnywhere, Category = "NoiseSet")
-	float MeshScale{100.f};
 	
 	TArray<TArray<float>> noiseMap;
 	
@@ -70,10 +68,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<FTerrainType> Terrains;
 
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Replicated)
 	TArray<UProceduralMeshComponent*> Meshes;
 	
 	UMaterial* BaseMaterial;
 
 	
 };
+

@@ -2,6 +2,7 @@
 
 
 #include "NoiseMap.h"
+#include "NoiseMapGernerator.h"
 
 
 NoiseMap::NoiseMap()
@@ -30,8 +31,8 @@ TArray<TArray<float>> NoiseMap::CreateNoiseMap(uint32_t width, uint32_t height, 
 	{
 		ParallelFor(width, [&](int32 j)
 		{
-			auto x = Location.X / 100.f;
-			auto y = Location.Y / 100.f;
+			auto x = Location.X / ANoiseMapGernerator::MeshScale;
+			auto y = Location.Y / ANoiseMapGernerator::MeshScale;
 			FVector2D sample { (static_cast<float>(j)+ y)/ width * scale, (static_cast<float>(i)+ x) / height  * scale};
 			float perlin_value = Perlin(sample);
 			//float perlin_value = FMath::PerlinNoise2D(sample);

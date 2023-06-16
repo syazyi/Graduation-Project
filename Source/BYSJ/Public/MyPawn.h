@@ -18,7 +18,7 @@ class BYSJ_API AMyPawn : public APawn
 public:
 	// Sets default values for this pawn's properties
 	AMyPawn();
-
+	void DestroyComponent();
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -32,6 +32,8 @@ public:
 
 	void MoveForward(float value);
 	void MoveRight(float value);
+
+	void CalculateCurrentBlockLocation();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pawn Properties")
 	float Speed{ 10000.f };
@@ -47,6 +49,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere)
 	UStaticMeshComponent* StaticMesh;
-private:
+	
+	UPROPERTY(VisibleAnywhere)
 	UBuildComponent* BuildComponent;
+
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
+	FVector CurrentLocation;
 };
