@@ -12,6 +12,7 @@
 UCLASS()
 class BYSJ_API UMyGameInstance : public UGameInstance
 {
+	
 	GENERATED_BODY()
 public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
